@@ -319,8 +319,12 @@
 
   <!-- NUEVA RECETA -->
   <section id="nueva-receta" class="section">
-    <div class="section-title">Nueva Receta</div>
-    <div class="section-sub">Combiná ingredientes y calculá el costo</div>
+    <div class="section-title" id="receta-titulo">Nueva Receta</div>
+    <div class="section-sub" id="receta-sub">Combiná ingredientes y calculá el costo</div>
+    <div id="banner-edicion" style="display:none; background:#e8f5e9; border:1px solid #a5d6a7; border-radius:8px; padding:10px 16px; margin-bottom:16px; align-items:center; justify-content:space-between; gap:12px;">
+      <span style="font-size:13px; color:#2e7d32;">✏️ Editando receta existente</span>
+      <button class="btn btn-outline btn-sm" onclick="cancelarEdicionReceta()">Cancelar edición</button>
+    </div>
 
     <div class="card">
       <div class="form-row">
@@ -568,13 +572,52 @@ document.addEventListener('input', e => {
 });
 
 function limpiarReceta() {
+  editandoRecetaId = null;
   document.getElementById('rec-nombre').value = '';
   document.getElementById('rec-porciones').value = '1';
+  document.getElementById('receta-titulo').textContent = 'Nueva Receta';
+  document.getElementById('receta-sub').textContent = 'Combiná ingredientes y calculá el costo';
+  document.getElementById('banner-edicion').style.display = 'none';
   lineas = [{ id: uid(), ingId: '', cantidad: '' }];
   renderLineasReceta();
 }
 
 // ===================== GUARDAR RECETA =====================
+let editandoRecetaId = null;
+
+function editarReceta(id) {
+  const recetas = DB.getRecetas();
+  const r = recetas.find(x => x.id === id);
+  if (!r) return;
+
+  editandoRecetaId = id;
+  lineas = r.lineas.map(l => ({ ...l }));
+
+  // Ir a la pestaña
+  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('nueva-receta').classList.add('active');
+  document.querySelectorAll('.nav-btn')[1].classList.add('active');
+
+  document.getElementById('rec-nombre').value = r.nombre;
+  document.getElementById('rec-porciones').value = r.porciones;
+  document.getElementById('receta-titulo').textContent = 'Editar Receta';
+  document.getElementById('receta-sub').textContent = 'Modificá los ingredientes o cantidades';
+  document.getElementById('banner-edicion').style.display = 'flex';
+
+  renderLineasReceta();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+  toast('✏️ Editando: ' + r.nombre);
+}
+
+function cancelarEdicionReceta() {
+  editandoRecetaId = null;
+  document.getElementById('receta-titulo').textContent = 'Nueva Receta';
+  document.getElementById('receta-sub').textContent = 'Combiná ingredientes y calculá el costo';
+  document.getElementById('banner-edicion').style.display = 'none';
+  limpiarReceta();
+}
+
 function guardarReceta() {
   const nombre = document.getElementById('rec-nombre').value.trim();
   if (!nombre) { toast('⚠️ Poné un nombre a la receta'); return; }
@@ -584,21 +627,24 @@ function guardarReceta() {
 
   const porciones = parseInt(document.getElementById('rec-porciones').value) || 1;
   const costo = calcularCostoTotal();
-  const receta = {
-    id: uid(),
-    nombre,
-    porciones,
-    lineas: lineasValidas,
-    costo,
-    fecha: today(),
-  };
 
   const recetas = DB.getRecetas();
-  recetas.push(receta);
-  DB.setRecetas(recetas);
 
-  toast('✅ Receta guardada: ' + nombre);
-  limpiarReceta();
+  if (editandoRecetaId) {
+    const idx = recetas.findIndex(r => r.id === editandoRecetaId);
+    if (idx !== -1) {
+      recetas[idx] = { ...recetas[idx], nombre, porciones, lineas: lineasValidas, costo, fecha: today() };
+    }
+    DB.setRecetas(recetas);
+    toast('✅ Receta actualizada: ' + nombre);
+    cancelarEdicionReceta();
+  } else {
+    const receta = { id: uid(), nombre, porciones, lineas: lineasValidas, costo, fecha: today() };
+    recetas.push(receta);
+    DB.setRecetas(recetas);
+    toast('✅ Receta guardada: ' + nombre);
+    limpiarReceta();
+  }
 }
 
 // ===================== MIS RECETAS =====================
@@ -631,6 +677,7 @@ function renderRecetas() {
         <div class="recipe-card-cost">${formatPeso(costoActual)}${porPorcion}</div>
         <div class="recipe-card-actions">
           <button class="btn btn-outline btn-sm" onclick="verDetalle('${r.id}')">Ver detalle</button>
+          <button class="btn btn-outline btn-sm" onclick="editarReceta('${r.id}')">✏️ Editar</button>
           <button class="btn btn-danger btn-sm" onclick="eliminarReceta('${r.id}')">Eliminar</button>
         </div>
       </div>
